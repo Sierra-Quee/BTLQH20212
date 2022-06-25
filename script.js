@@ -295,12 +295,12 @@ function reload(init) {
   T[19][37] = 30; T[37][19] = 30;
   T[44][28] = 10; T[28][44] = 10;
 
-  if(ADD_TRAFFIC) {
-    T[2][9] = 8; T[9][2] = 8;
-    T[12][36] = 5; T[36][12] = 5;
-    T[14][29] = 6; T[29][14] = 6;
-    T[39][57] = 10; T[57][39] = 10;
-  }
+  // if(ADD_TRAFFIC) {
+  //   T[2][9] = 8; T[9][2] = 8;
+  //   T[12][36] = 5; T[36][12] = 5;
+  //   T[14][29] = 6; T[29][14] = 6;
+  //   T[39][57] = 10; T[57][39] = 10;
+  // }
 
   /* Tính trọng số của các nút */
   w = new Array(nodeNumber).fill(0);
@@ -1215,6 +1215,380 @@ function setup() {
   // }
 
   // 3.4. Mentor 2: Thêm liên kết trực tiếp
+
+  if(ADD_TRAFFIC) {
+    T[2][9] = 8; T[9][2] = 8;
+    T[12][36] = 5; T[36][12] = 5;
+    T[14][29] = 6; T[29][14] = 6;
+    T[39][57] = 10; T[57][39] = 10;
+    if (MENTOR_2) {
+      console.log("MENTOR 2");
+  
+      let directLink = [];
+      let backbonesDistance = [];
+      for (let i = 0; i < numberBackbones; i++) {
+        backbonesDistance[i] = [];
+        for (let j = 0; j < numberBackbones; j++) {
+          backbonesDistance[i][j] = 0;
+          for (let k = 0; k < path[i][j].length - 1; k++) {
+            backbonesDistance[i][j] += calcDistance(backbones[path[i][j][k]], backbones[path[i][j][k + 1]]);
+          }
+        }
+      }
+      
+  
+      for (let i = 0; i < numberBackbones; i++) {
+        for (let j = 0; j < numberBackbones; j++) {
+          console.log("backbonesDistance[" + i + "][" + j + "] = " + backbonesDistance[i][j]);
+        }
+      }
+      /* Gán các cặp nút */
+      let pair = [];
+      for (let i = 0; i < numberBackbones; i++) {
+        for (let j = i; j < numberBackbones; j++) {
+          pair.push({
+            s: i,
+            d: j,
+            hop: hop[i][j],
+          });
+        }
+      }
+      console.log(pair);
+      pair.sort(function (a, b) {
+        return b.hop - a.hop;
+      });
+      //console.log(pair);
+      pair.forEach((e) => {
+        let n = Math.ceil(T_b[e.s][e.d] / C);
+        let u = T_b[e.s][e.d] / (n * C);
+        console.log("Soucre: " + e.s + " Dest: " + e.d + " Hop = " + e.hop + " n= " + n + " u = " + u);
+        if (e.hop >= 2 && T_b[e.s][e.d] > 0) {
+          /* Thêm liên kết trực tiếp */
+          if (u > u_min) {
+            console.log("Thêm liên kết trực tiếp");
+            lineNode(backbones[e.s], backbones[e.d], color(111, 255, 0));
+            links[e.s][e.d] = links[e.d][e.s] = {
+              n: n,
+              u: u,
+              d: calcDistance(backbones[e.s], backbones[e.d]),
+              trafic: T_b[e.s][e.d]
+            };
+            /* Tính khoảng cách giữa nút nguồn và đích dọc theo cây */
+            let backbonesDistance = 0;
+            for (let k = 0; k < path[e.s][e.d].length - 1; k++) {
+              backbonesDistance += calcDistance(backbones[path[e.s][e.d][k]], backbones[path[e.s][e.d][k + 1]]);
+            }
+            let pair = [];
+            pair.start = e.s;
+            pair.stop = e.d;
+            pair.numberHop = hop[e.s][e.d];
+            pair.T = T_b[e.s][e.d];
+            pair.distance = backbonesDistance;
+            directLink.push(pair);
+          } 
+          /* Chuyển lưu lượng */
+          else {
+            let minDist = {
+              dist: Infinity,
+            };
+            /* Tìm nút Home */
+            for (let i = 1; i < path[e.s][e.d].length - 1; i++) {
+              let currentBackboneIndex = path[e.s][e.d][i];
+              let localDist = calcDistance(backbones[e.s], backbones[currentBackboneIndex]) +
+                              calcDistance(backbones[e.d], backbones[currentBackboneIndex]);
+              console.log("Cost " + path[e.s][e.d][i] + " = " + localDist);
+              if (localDist < minDist.dist) {
+                minDist = {
+                  dist: localDist,
+                  backboneIndex: currentBackboneIndex,
+                };
+              }
+            }
+            console.log("Chuyển lưu lượng về Home: " + minDist.backboneIndex);
+            /* Cập nhật lại lưu lượng */
+            T_b[e.s][minDist.backboneIndex] = T_b[minDist.backboneIndex][e.s] =
+              T_b[e.s][minDist.backboneIndex] + T_b[e.s][e.d];
+            T_b[e.d][minDist.backboneIndex] = T_b[minDist.backboneIndex][e.d] =
+              T_b[e.d][minDist.backboneIndex] + T_b[e.s][e.d];
+            console.log("T(" + e.s +", " + minDist.backboneIndex + ") = " + T_b[e.s][minDist.backboneIndex]);
+            console.log("T(" + minDist.backboneIndex +", " + e.d + ") = " + T_b[e.s][minDist.backboneIndex]);
+          }
+        } else if (e.hop == 1 && T_b[e.s][e.d] > 0) {
+          lineNode(backbones[e.s], backbones[e.d], color(111, 255, 0));
+          links[e.s][e.d] = links[e.d][e.s] = {
+            n: n,
+            u: u,
+            d: calcDistance(backbones[e.s], backbones[e.d]),
+            trafic: T_b[e.s][e.d]
+          };
+        }
+      });
+  
+      console.log("Liên kết trực tiếp: ");
+      directLink.forEach((pair) => {
+        console.log(pair);
+      })
+      // Sắp xếp các cặp nút theo thứ tự giảm dần về khoảng cách (theo cây)
+      directLink.sort(function (a, b) {
+        return b.distance - a.distance;
+      });
+  
+      // Phân loại s_list và d_list cho mỗi cặp nút
+      directLink .forEach((pair) => {
+        let i = pair.start;
+        let j = pair.stop;
+        pair.sList = [];
+        pair.dList = [];
+        let L = calcDistance(backbones[i], backbones[j]);
+        for (let k = 0; k < numberBackbones; k++) {
+          let dist_ik = backbonesDistance[i][k];
+          let dist_kj = backbonesDistance[k][j];
+          if (dist_ik + L < dist_kj) {
+            pair.sList.push(k);
+          }
+          if (dist_kj + L < dist_ik) {
+            pair.dList.push(k);
+          }
+        }
+        console.log("Start: " + i + " Stop: " + j);
+        console.log("S list: " + pair.sList);
+        console.log("D list: " + pair.dList);
+  
+        pair.canAddDirectLink = true;
+        let max = {
+          value: 0,
+          start: -1,
+          stop: -1,
+        };
+        /**
+         * maxL = dist(ni, nj) - dist(ni, s) - dis(nj, d) 
+         * Khoảng cách giữa các nút là tính dọc theo đường đi trên cây chứ không phải theo đường trực tiếp
+         * VD: Cây: 1 -> 2 -> 3 thì dist(1,3) = dist(1,2) + dist(2, 3)   
+         */
+        let maxLList = [];
+        maxLList.push(backbonesDistance[i][j]);
+        pair.sList.forEach((ni) => {
+          pair.dList.forEach((nj) => {
+            // if (T_b[ni][nj] > 0 && (ni != i || nj != j))
+            if (ni != i || nj != j) {
+              console.log("ni = " + ni + ", nj = " + nj);
+              console.log("backbonesDistance[" + ni + "][" + nj + "] = " + backbonesDistance[ni][nj]);
+              console.log("backbonesDistance[" + ni + "][" + i + "] = " + backbonesDistance[ni][i]);
+              console.log("backbonesDistance[" + nj + "][" + j + "] = " + backbonesDistance[nj][j]);
+              let localL = backbonesDistance[ni][nj] - backbonesDistance[ni][i] - backbonesDistance[nj][j];
+  
+              maxLList.push(localL);
+              // maxLList.sort(function(a, b) {
+              //   return a - b;
+              // });
+              // console.log("Max List: " + maxLList);
+  
+              console.log("maxL(" + ni  +"," + nj + "): " + localL);
+              if (localL > max.value) {
+                max.value = localL;
+                max.start = ni;
+                max.stop = nj;
+              }
+            }
+          });
+        });
+        pair.maxL = max;
+        console.log(max);
+        maxLList.sort(function(a, b) {
+          return b - a;
+        });
+        console.log("Max List: " + maxLList);
+        if(maxLList.length > 1) {
+          backbonesDistance[i][j] = backbonesDistance[j][i] = Math.random() * (maxLList[0] - maxLList[1]) + maxLList[1]; 
+        } else {
+          backbonesDistance[i][j] = backbonesDistance[j][i] = calcDistance(backbones[i], backbones[j]); 
+        }
+        console.log("backbonesDistance[" + i + "][" + j + "] = " + backbonesDistance[i][j]);
+  
+        pair.maxL = max;
+        console.log(max);
+        // if (max.value > calcDistance(backbones[i], backbones[j])) {
+        //   if (Math.ceil(max.value) < backbonesDistance[i][j]) {
+        //     backbonesDistance[i][j] = backbonesDistance[j][i] = Math.ceil(max.value) - 1;
+        //   } else {
+        //     backbonesDistance[i][j] = backbonesDistance[j][i] = (max.value + backbonesDistance[i][j]) / 2;
+        //   }
+        // } else {
+        //   backbonesDistance[i][j] = backbonesDistance[j][i] = calcDistance(backbones[i], backbones[j]); 
+        // }
+      });
+  
+  
+  
+  
+  
+  
+  
+  
+      // // 3.4.1. Tính khoảng cách giữa các nút backbone dọc theo cây
+      // 0003
+      // // Tìm các cặp nút có lưu lượng và số hop > 1
+      // let mentor2NodePair = [];
+      // for (let i = 0; i < numberBackbones - 1; i++) {
+      //   for (let j = i + 1; j < numberBackbones; j++) {
+      //     if (hop[i][j] > 1 && T_b[i][j] > 0) {
+      //       let pair = [];
+      //       pair.start = i;
+      //       pair.stop = j;
+      //       pair.numberHop = hop[i][j];
+      //       pair.T = T_b[i][j];
+      //       pair.distance = backbonesDistance[i][j];
+      //       mentor2NodePair.push(pair);
+      //     }
+      //   }
+      // }
+      // console.log(mentor2NodePair);
+      // // Sắp xếp các cặp nút theo thứ tự giảm dần về khoảng cách (theo cây)
+      // mentor2NodePair.sort(function (a, b) {
+      //   return b.distance - a.distance;
+      // });
+      // // Phân loại s_list và d_list cho mỗi cặp nút
+      // mentor2NodePair.forEach((pair) => {
+      //   let i = pair.start;
+      //   let j = pair.stop;
+      //   pair.sList = [];
+      //   pair.dList = [];
+      //   let L = calcDistance(backbones[i], backbones[j]);
+      //   for (let k = 0; k < numberBackbones; k++) {
+      //     let dist_ik = backbonesDistance[i][k];
+      //     let dist_kj = backbonesDistance[k][j];
+      //     if (dist_ik + L < dist_kj) {
+      //       pair.sList.push(k);
+      //     }
+      //     if (dist_kj + L < dist_ik) {
+      //       pair.dList.push(k);
+      //     }
+      //   }
+      //   console.log("Start: " + i + " Stop: " + j);
+      //   console.log("S list: " + pair.sList);
+      //   console.log("D list: " + pair.dList);
+  
+      //   pair.canAddDirectLink = true;
+      //   let max = {
+      //     value: 0,
+      //     start: -1,
+      //     stop: -1,
+      //   };
+      //   /**
+      //    * maxL = dist(ni, nj) - dist(ni, s) - dis(nj, d) 
+      //    * Khoảng cách giữa các nút là tính dọc theo đường đi trên cây chứ không phải theo đường trực tiếp
+      //    * VD: Cây: 1 -> 2 -> 3 thì dist(1,3) = dist(1,2) + dist(2, 3)   
+      //    */
+      //   pair.sList.forEach((ni) => {
+      //     pair.dList.forEach((nj) => {
+      //       if (T_b[ni][nj] > 0 && (ni != i || nj != j)) {
+      //         let localL = backbonesDistance(ni, nj) - backbonesDistance(ni, i) - backbonesDistance(nj, j);
+  
+      //         let maxLList = [];
+      //         maxLList.push(localL);
+      //         maxLList.sort(function(a, b) {
+      //           return a - b;
+      //         });
+      //         console.log("Max List: " + maxLList);
+  
+      //         console.log("maxL(" + ni + +"," + nj + "): " + localL);
+      //         if (localL > max.value) {
+      //           max.value = localL;
+      //           max.start = ni;
+      //           max.stop = nj;
+      //         }
+      //       }
+      //     });
+      //   });
+      //   pair.maxL = max;
+      //   console.log(max);
+      //   if (max.value > calcDistance(backbones[i], backbones[j])) {
+      //     if (max.value >= backbonesDistance[i][j]) {
+      //       pair.canAddDirectLink = false;
+      //     } else {
+      //       if (Math.ceil(max.value) < backbonesDistance[i][j]) {
+      //         backbonesDistance[i][j] = backbonesDistance[j][i] = Math.ceil(
+      //           max.value
+      //         );
+      //       } else {
+      //         backbonesDistance[i][j] = backbonesDistance[j][i] =
+      //           (max.value + backbonesDistance[i][j]) / 2;
+      //       }
+      //     }
+      //   } else {
+      //     backbonesDistance[i][j] = backbonesDistance[j][i] = calcDistance(
+      //       backbones[i],
+      //       backbones[j]
+      //     );
+      //   }
+      // });
+      // Vẽ các liên kết trực tiếp
+      directLink.forEach((pair) => {
+        if (pair.canAddDirectLink) {
+          lineNode(
+            backbones[pair.start],
+            backbones[pair.stop],
+            color(255, 0, 111)
+          );
+          let n = Math.ceil(T_b[pair.start][pair.stop] / C);
+          let u = T_b[pair.start][pair.stop] / (C * n);
+          links[pair.start][pair.stop] = links[pair.stop][pair.start] = {
+            n: n,
+            u: u,
+            d: backbonesDistance[pair.start][pair.stop],
+            trafic: T_b[pair.start][pair.stop],
+          };
+        }
+      });
+  
+      // In bảng liên kết trực tiếp
+      let htmlDirectLinkTable =
+        '<table class="ui celled table center aligned unstackable selectable" id = "table-direct-link"><thead><tr>';
+      // htmlDirectLinkTable +=
+      //   "<th>Nút đầu</th><th>Nút cuối</th><th>Khoảng cách</th><th>maxL</th><th>Chiều dài cũ theo cây</th>";
+      htmlDirectLinkTable +=
+        "<th>Nút đầu</th><th>Nút cuối</th><th>Khoảng cách</th><th>Chiều dài cũ theo cây</th>";
+      htmlDirectLinkTable +=
+        "<th>Độ dài liên kết trực tiếp</th><th>Số đường</th><th>Giá</th>";
+      htmlDirectLinkTable += "</tr></thead><tbody>";
+      directLink.forEach((pair) => {
+        if (pair.canAddDirectLink) {
+          htmlDirectLinkTable += "<tr><td>" + (pair.start + 1) + "</td>";
+          htmlDirectLinkTable += "<td>" + (pair.stop + 1) + "</td>";
+          htmlDirectLinkTable +=
+            "<td>" +
+            calcDistance(backbones[pair.start], backbones[pair.stop]).toFixed(2) +
+            "</td>";
+          // htmlDirectLinkTable += "<td>" + pair.maxL.value.toFixed(2) + "</td>";
+          htmlDirectLinkTable += "<td>" + pair.distance.toFixed(2) + "</td>";
+          htmlDirectLinkTable +=
+            "<td>" + links[pair.start][pair.stop].d.toFixed(2) + "</td>";
+          htmlDirectLinkTable +=
+            "<td>" + links[pair.start][pair.stop].n + "</td>";
+          htmlDirectLinkTable +=
+            "<td>" +
+            (
+              links[pair.start][pair.stop].d *
+              links[pair.start][pair.stop].n
+            ).toFixed(2) +
+            "</td></tr>";
+        }
+      });
+      htmlDirectLinkTable += "</tbody></table>";
+      $("#mentor2").show();
+      $("#direct-link").html(htmlDirectLinkTable);
+      $("#direct-link").scroll(function () {
+        if ($(this).scrollTop() == 0) {
+          $(this).css("border-top", "0");
+        } else {
+          $(this).css("border-top", "1px solid rgba(34,36,38,.1)");
+        }
+      });
+    } else {
+      $("#mentor2").hide();
+    }
+  }
+
   if (MENTOR_2) {
     console.log("MENTOR 2");
 
